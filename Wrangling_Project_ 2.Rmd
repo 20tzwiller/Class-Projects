@@ -1,0 +1,560 @@
+---
+title: "Wrangling Project"
+author: "Thomas Zwiller"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+I came to Mendoza because the MSBA program seemed like a perfect fit for me. I was a business major at Holy Cross College, but I also completed a computer science minor so I had some level of coding experience. I have been fascinated by machine learning and building models since the 2016 election when I first learned about Nate Silver. 
+
+<br>
+
+One of the things that helped grow that interest was modeling sports. I created an NFL model as a freshman at Holy Cross, and then developed a college football model as a junior. One of my goals for the Mendoza program was to learn how to refine my CFB model and make maintaining it more efficient (I update it manually every week in an excel spread sheet). 
+
+<br>
+
+This is my first step toward completing that goal. But first, a crash course about how my model works. 
+
+<br>
+
+My Model uses the following equation to make its team rating:
+
+\begin{equation}
+\text{Team A Offense Rating} = (Passing Completions \times 3.7) + (Passing Attempts \times -2.2) + \left(\frac{Passing Yards}{4}\right) + (Passing\ Touchdowns \times 11.3) + \\
+(Rush\ Attempts \times -1.5) + (Rush\ Yards \times 0.5) + (Rushing\ Touchdowns \times 15.9) + \\
+(Fumbles \times -14.1) + (Interceptions \times -14.1)
+\end{equation}
+
+<br>
+
+This equation is used twice, once for the offense rating and once for the defensive rating:
+
+\begin{equation}
+\text{Team A Net Rating} = \text{Team A Offense Rating} - \text{Team A Defense Rating}
+\end{equation}
+
+<br>
+
+Ideally, you would want your team to be rated as highly as possible on on offense while having as low a defensive rating as possible (negative even!).
+
+A positive net rating represents a better than average team, while a negative rating is below average.
+The higher the positive number, the better the team, the lower the negative number, the worse the team.
+
+To determine how likely a team is to win a game, the two ratings are compared in the following equation. 
+
+\begin{equation}
+\text{Team A % Of Winning} = \frac{1}{1 + 10^{(\text{Team B Rating} - \text{Team A Rating}) / 400}}
+\end{equation}
+
+My end goal was not to aggregate all my data and then calculate each teams chance of winning a given game. Instead I just wanted to calculate each teams rating from the last ten seasons and then produce a top-25 list based on net rating, then graph those 25 teams. 
+
+My first step was to load in the data that I found from Kragle. 
+
+```{r}
+cfb_2014 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb14.csv")
+cfb_2015 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb15.csv")
+cfb_2016 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb16.csv")
+cfb_2017 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb17.csv")
+cfb_2018 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb18.csv")
+cfb_2019 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb19.csv")
+cfb_2020 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb20.csv")
+cfb_2021 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb21.csv")
+cfb_2022 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb22.csv")
+cfb_2023 <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 1/Wrangling/Wrangling Project/CFB Data/cfb23.csv")
+```
+
+My second step was to start building a function: 
+
+```{r}
+team_rating_func <- function(Pass_Comp, Pass_Att, Pass_Yards, Pass_TD, Rush_Att, Rush_Yards, Rush_TD, Fumbles, Ints, Games){
+  rating = (as.numeric(Pass_Comp) * 3.7) + 
+    (as.numeric(Pass_Att) * -2.2) + 
+    (as.numeric(Pass_Yards)/ 4) +
+    (as.numeric(Pass_TD) * 11.3) + 
+    (as.numeric(Rush_Att) * -1.5) + 
+    (as.numeric(Rush_Yards) * 0.5) + 
+    (as.numeric(Rush_TD) * 15.9) + 
+    (as.numeric(Fumbles) * -14.1) + 
+    (as.numeric(Ints) * -14.1)
+  
+  rating = rating / as.numeric(Games)
+  
+  return(rating)
+}
+```
+
+This function could be applied to offensive and defensive ratings, though the variables would need to be carefully flipped for it to work.
+
+Now, I could actually crack open my data and see what form of wrangling I actually needed to do. 
+
+```{r}
+str(cfb_2014)
+```
+The first thing I realized was that
+
+A. I had a lot of data that I likely didn't really need to use and that 
+B. I was going to need to clean my team names because the format was 'Team (Conference)'
+C. The data frames that I downloaded all had differing rows (meaning a different number of teams) and differing columns (meaning a different number of variables)
+
+Let's address B first
+
+My first step was to split the strings based on the first parenthesis ('('), and then output the split result into two separate columns. I did so using stringr. I then used gsub to get rid of the last parenthesis and trimws to get rid of any remaining blank spaces. 
+
+```{r}
+#Import stringr
+library(stringr)
+cfb_2014[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2014$Team, '\\(', 2)
+#https://www.geeksforgeeks.org/how-to-split-column-into-multiple-columns-in-r-dataframe/
+cfb_2014$Conference <- gsub("\\)", "", cfb_2014$Conference)
+cfb_2014$Team <- trimws(cfb_2014$Team)
+#https://study.com/academy/lesson/removing-space-from-string-in-r-programming.html#:~:text=R%20has%20some%20handy%2C%20built,trailing%20spaces%20in%20a%20string.
+
+cfb_2015[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2015$Team, '\\(', 2)
+cfb_2015$Conference <- gsub("\\)", "", cfb_2015$Conference)
+cfb_2015$Team <- trimws(cfb_2015$Team)
+
+cfb_2016[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2016$Team, '\\(', 2)
+cfb_2016$Conference <- gsub("\\)", "", cfb_2016$Conference)
+cfb_2016$Team <- trimws(cfb_2016$Team)
+
+cfb_2017[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2017$Team, '\\(', 2)
+cfb_2017$Conference <- gsub("\\)", "", cfb_2017$Conference)
+cfb_2017$Team <- trimws(cfb_2017$Team)
+
+cfb_2018[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2018$Team, '\\(', 2)
+cfb_2018$Conference <- gsub("\\)", "", cfb_2018$Conference)
+cfb_2018$Team <- trimws(cfb_2018$Team)
+
+cfb_2019[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2019$Team, '\\(', 2)
+cfb_2019$Conference <- gsub("\\)", "", cfb_2019$Conference)
+cfb_2019$Team <- trimws(cfb_2019$Team)
+
+cfb_2020[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2020$Team, '\\(', 2)
+cfb_2020$Conference <- gsub("\\)", "", cfb_2020$Conference)
+cfb_2020$Team <- trimws(cfb_2020$Team)
+
+cfb_2021[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2021$Team, '\\(', 2)
+cfb_2021$Conference <- gsub("\\)", "", cfb_2021$Conference)
+cfb_2021$Team <- trimws(cfb_2021$Team)
+
+cfb_2022[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2022$Team, '\\(', 2)
+cfb_2022$Conference <- gsub("\\)", "", cfb_2022$Conference)
+cfb_2022$Team <- trimws(cfb_2022$Team)
+
+cfb_2023[ , c('Team', 'Conference')] <- str_split_fixed(cfb_2023$Team, '\\(', 2)
+cfb_2023$Conference <- gsub("\\)", "", cfb_2023$Conference)
+cfb_2023$Team <- trimws(cfb_2023$Team)
+```
+
+Now that I had cleaner names, I decided to design the actual structure of my temporary data frames. 
+
+The first way I tried aggregating the data was by using the numerical value of each column and then feeding it into my custom function. However, that process was slow and rather tedious because I would have to check each column for each data frame because the frames all varied in column number and row number. 
+
+So for the 2015 data frame, I decided to try and access the columns based on their name, not their number.
+
+That was much smoother operation as the column names were consistent across the various frames. Knowing this method would work, I decided to construct a function to quickly compile the metrics I needed.
+
+```{r}
+data_constructor <- function(year){
+  
+  #I used paste here to create the variable names so that I could only input the year I needed for the function
+  
+  #https://www.digitalocean.com/community/tutorials/paste-in-r
+  
+  new_frame <- paste("CFB", year, "Results", sep = "_")
+  
+  #https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/get
+  #I also had to use get so that the function could pull in each existing frame
+  old_frame <- get(paste("cfb", year, sep = "_"))
+  
+  #and then I constructed the frame template
+  new_frame <- data.frame('Primary Key' = character(nrow(old_frame)),
+                               'Name' = character(nrow(old_frame)),
+                               'Conference' = character(nrow(old_frame)),
+                               'Year' = character(nrow(old_frame)),
+                               'O Rating' = double(nrow(old_frame)),
+                               'D Rating' = double(nrow(old_frame)),
+                               'Net Rating' = double(nrow(old_frame)),
+                                'Wins' = numeric(nrow(old_frame))
+                               )
+  #made a primary key so I could merge all the tables
+  new_frame$Primary.Key <- paste(old_frame$Team, year, sep = "_")
+  #loaded in the conferences
+  new_frame$Conference <- old_frame$Conference
+  #loaded in the team names
+  new_frame$Name <- old_frame$Team
+  #and put in the years
+  new_frame$Year <- rep(year, nrow(old_frame))
+  new_frame$Wins <- as.numeric(old_frame$Win)
+  
+#and then did the actual calculations for offense by doing a nested function call
+new_frame$O.Rating <- apply(old_frame, MARGIN = 1, FUN = function(row) {
+  team_rating_func(
+    Pass_Comp = as.numeric(row["Pass.Completions"]),
+    Pass_Att = as.numeric(row["Pass.Attempts"]),
+    Pass_Yards = as.numeric(row["Pass.Yards"]),
+    Pass_TD = as.numeric(row["Pass.Touchdowns"]),
+    Rush_Att = as.numeric(row["Rush.Attempts"]),
+    Rush_Yards = as.numeric(row["Rush.Yds"]),
+    Rush_TD = as.numeric(row["Rushing.TD"]),
+    Fumbles = as.numeric(row["Fumbles.Lost"]),
+    Ints = as.numeric(row["Interceptions.Thrown.x"]),
+    Games = as.numeric(row["Games"])
+  )
+})
+
+#and then the calculations for defense by doing a nested function call
+new_frame$D.Rating <- apply(old_frame, MARGIN = 1, FUN = function(row) {
+  team_rating_func(
+    Pass_Comp = row["Opp.Completions.Allowed"],
+    Pass_Att = row["Opp.Pass.Attempts"],
+    Pass_Yards = row["Opp.Pass.Yds.Allowed"],
+    Pass_TD = row["Opp.Pass.TDs.Allowed"],
+    Rush_Att = row["Opp.Rush.Attempts"],
+    Rush_Yards = row["Opp.Rush.Yards.Alloweed"], #this is an intentional typo
+    Rush_TD = row["Opp.Rush.Touchdowns.Allowed"],
+    Fumbles = row["Fumbles.Recovered"],
+    Ints = row["Opponents.Intercepted"],
+    Games = row["Games"]
+  )
+})
+  
+#finally created the net ratings
+new_frame$Net.Rating <- new_frame$O.Rating - new_frame$D.Rating
+
+#and returned the frame
+return(new_frame)
+  
+}
+```
+
+I used 2014 to make sure my function worked, and then ran 2014-2020 through my function. 
+```{r}
+CFB_2014_Results <- data_constructor(2014)
+CFB_2015_Results <- data_constructor(2015)
+CFB_2016_Results <- data_constructor(2016)
+CFB_2017_Results <-  data_constructor(2017)
+CFB_2018_Results <-  data_constructor(2018)
+CFB_2019_Results <- data_constructor(2019)
+CFB_2020_Results <- data_constructor(2020)
+```
+
+This model worked really well until I got to the last three frames, which had a handful of renamed columns. YAY! So, I had to rename them. 
+
+In addition, because I wanted to pull wins (something I decided to change at the last minute) I then had to reuse the string split function from earlier. 
+
+2021 was a bit of a head scratcher. A lot of columns that you would expect to be numeric (such as pass yards, rush yards, and their defensive counterparts) where character values. 
+
+```{r}
+#For some reason the 2021 data frame was fairly poor. A lot of columns that were numeric in nature were labeled as character columns and were throwing a lot of weird errors
+cfb_2021$Interceptions.Thrown.x <- cfb_2021[ ,148]
+cfb_2021$Pass.Yards <- as.numeric(gsub(",","", cfb_2021$Pass.Yards))
+cfb_2021$Rush.Yds <- as.numeric(gsub(",","", cfb_2021$Rush.Yds))
+cfb_2021$Opp.Pass.Yds.Allowed <- as.numeric(gsub(",","", cfb_2021$Opp.Pass.Yds.Allowed))
+cfb_2021$Opp.Rush.Yards.Alloweed <- as.numeric(gsub(",","", cfb_2021$Opp.Rush.Yards.Alloweed))
+cfb_2021[ , c('Win', 'Loss')] <- str_split_fixed(cfb_2021$Win.Loss, '-', 2)
+CFB_2021_Results <-  data_constructor(2021)
+```
+
+2022 still required some cleaning, but was the easiest of the set.
+```{r}
+cfb_2022$Interceptions.Thrown.x <- cfb_2022$Interceptions.Thrown_y
+cfb_2022[ , c('Win', 'Loss')] <- str_split_fixed(cfb_2022$Win.Loss, '-', 2)
+CFB_2022_Results <- data_constructor(2022)
+```
+
+
+I also found that I had an NA by coercion issue for the 2023 data frame. Row 131 seemed to have some sort of weird issue where one of the values was 'reclassifying', likely some sort of error on the part of whoever put the data frame together. So I dropped it, and then cleaned up the pass completion and pass completion allowed values. 
+
+```{r}
+cfb_2023 <- cfb_2023[ -131, ]
+cfb_2023$Interceptions.Thrown.x <- cfb_2023$Interceptions.Thrown_x
+cfb_2023$Pass.Completions <- as.numeric(gsub(",","", cfb_2023$Pass.Completions))
+cfb_2023$Opp.Completions.Allowed <- as.numeric(gsub(",","", cfb_2023$Opp.Completions.Allowed))
+cfb_2023[ , c('Win', 'Loss')] <- str_split_fixed(cfb_2023$Win.Loss, '-', 2)
+CFB_2023_Results <-  data_constructor(2023)
+```
+
+Now with the data cleaned, I merged all the existing databases into one main table
+
+```{r}
+library(dplyr)
+#Isn't dplyr a wonderful thing? https://stackoverflow.com/questions/68287677/merging-multiple-dataframes-in-r
+
+final_set <- bind_rows(CFB_2014_Results, CFB_2015_Results, CFB_2016_Results, CFB_2017_Results, CFB_2018_Results, CFB_2019_Results, CFB_2020_Results,
+                       CFB_2021_Results, CFB_2022_Results, CFB_2023_Results)
+```
+
+One thing that did come up when I was trying to graph were team names in my data base not being the same as the ones in the CFBFastR Package. The first one I noticed was USC, which is listed as Southern California in my set. So I ran the graph a few times, saw which teams the computer read in as errors and modified them manually. The names did change a few times, so I had to adjust the same teams multiple times.
+
+```{r}
+final_set$Name[final_set$Name == 'Southern California'] <- 'USC'
+final_set$Name[final_set$Name == 'Army West Point'] <- 'Army'
+final_set$Name[final_set$Name == 'Eastern Mich.'] <- 'Eastern Michigan'
+final_set$Name[final_set$Name == 'Fla. Atlantic'] <- 'Florida Atlantic'
+final_set$Name[final_set$Name == 'Middle Tenn.'] <- 'Middle Tennessee'
+final_set$Name[final_set$Name == 'Southern Miss.'] <- 'Southern Mississippi'
+final_set$Name[final_set$Name == 'Western Ky.'] <- 'Western Kentucky'
+final_set$Name[final_set$Name == 'Western Mich.'] <- 'Western Michigan'
+final_set$Name[final_set$Name == 'La.-Monroe'] <- 'Louisiana Monroe'
+final_set$Name[final_set$Name == 'Northern Ill.'] <- 'Northern Illinois'
+final_set$Name[final_set$Name == 'South Fla.'] <- 'South Florida'
+final_set$Name[final_set$Name == 'Ga. Southern'] <- 'Georgia Southern'
+final_set$Name[final_set$Name == 'Central Mich.'] <- 'Central Michigan'
+final_set$Name[final_set$Name == 'ULM'] <- 'Louisiana Monroe'
+final_set$Name[final_set$Name == 'App State'] <- 'Appalachian State'
+final_set$Name[final_set$Name == 'NIU'] <- 'Northern Illinois'
+final_set$Name[final_set$Name == 'Coastal Caro.'] <- 'Coastal Carolina'
+```
+
+I also realized that Miami Florida and Miami Ohio were named Miami (OH), Miami (FL) so my parenthetical split operation didn't work on them. So I had to make some further alterations to clean up both the name and their column. 
+
+```{r}
+final_set$Name[final_set$Conference == 'OH (MAC'] <- 'Miami (OH)'
+final_set$Name[final_set$Conference == 'FL (ACC'] <- 'Miami'
+final_set$Conference[final_set$Name == 'Miami (OH)'] <- 'MAC'
+final_set$Conference[final_set$Name== 'Miami'] <- 'ACC'
+```
+
+
+I then needed to do some conference renaming for a few values that were named differently across multiple frames. 
+```{r}
+final_set$Conference[final_set$Name == 'Ole Miss'] <- 'SEC'
+final_set$Conference[final_set$Name == 'Pittsburgh'] <- 'ACC'
+final_set$Conference[final_set$Name == 'Notre Dame'] <- 'FBS Independent'
+final_set$Conference[final_set$Conference == 'MWC'] <- 'Mountain West'
+```
+
+
+Finally, I altered the rating for any team that is traditionally considered to be Group of 5. This lowered their values and kept the values of the 'Power 5' teams normal. 
+```{r}
+final_set$O.Rating <- final_set$O.Rating * ifelse(
+    (final_set$Conference == 'MAC' | 
+    final_set$Conference == 'AAC' | 
+    final_set$Conference == 'C-USA'|   
+    final_set$Conference == 'Mountain West' | 
+    final_set$Conference == 'Sun Belt')
+    |
+    (final_set$Conference =='FBS Independent' & final_set$Name != 'Notre Dame') , .75, 1)
+
+final_set$D.Rating <- final_set$D.Rating * ifelse(
+  (final_set$Conference == 'MAC' | 
+    final_set$Conference == 'AAC' | 
+    final_set$Conference == 'C-USA'|   
+    final_set$Conference == 'Mountain West' | 
+    final_set$Conference == 'Sun Belt') |
+    (final_set$Conference =='FBS Independent' & final_set$Name != 'Notre Dame')
+    , 1.25, 1)
+
+final_set$Net.Rating <- final_set$O.Rating - final_set$D.Rating
+```
+
+
+Now, with all 1253 teams defined and in one database, it's time to start answering the question that lead me to do all this: who are the top-25 teams in the CFP era. I started by using dplyr in the frame, filtering to only include Power 5 teams, as well as Notre Dame.
+
+```{r}
+library(dplyr)
+
+top_25 <- final_set %>%
+  filter(Conference == 'SEC' | Conference == 'ACC' |
+           Conference == 'Pac-12' | Conference == 'Big Ten' |
+           Conference == 'Big 12'| Name == "Notre Dame") %>%
+  arrange(desc(Net.Rating)) %>%
+  slice(1:25)
+
+top_25
+```
+
+Time to try graphing!
+```{r}
+if (!require("remotes")) install.packages("remotes")
+remotes::install_github("Kazink36/cfbplotR")
+
+library(cfbfastR)
+library(cfbplotR)
+library(tidyverse)
+library(ggthemes)
+
+ggplot(top_25, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "The 25 Best Teams of the CFP Era",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()+
+  ylim(100, 0) + 
+  xlim(135, 250)
+#https://kazink36.github.io/cfbplotR/
+```
+And just like that, I have my answer. The best teams in CFP area include: Alabama, Clemson, Ohio State, LSU, Oregon, Michigan, TCU and Georgia. The singular best team was Clemson 2018, closely followed by Ohio State 2019 and Clemson 2019.
+
+But I couldn't quite stop there. I decided to throw in a top-25 SEC graph.
+```{r}
+top_25_SEC <- final_set %>%
+  filter(Conference == 'SEC') %>%
+  arrange(desc(Net.Rating)) %>%
+  slice(1:25)
+
+ggplot(top_25_SEC, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "The 25 Best SEC Teams of the CFP Era",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()
+
+```
+Which led to an ACC graph.
+```{r}
+top_25_ACC <- final_set %>%
+  filter(Conference == 'ACC') %>%
+  arrange(desc(Net.Rating)) %>%
+  slice(1:25)
+
+ggplot(top_25_ACC, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "The 25 Best ACC Teams of the CFP Era",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()
+
+```
+And then I had to do a Big Ten graph.
+```{r}
+top_25_Big10 <- final_set %>%
+  filter(Conference == 'Big Ten') %>%
+  arrange(desc(Net.Rating)) %>%
+  slice(1:25)
+
+ggplot(top_25_Big10, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "The 25 Best Big Ten Teams of the CFP Era",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()
+```
+
+Which led to a Big 12 graphic.
+```{r}
+top_25_Big12 <- final_set %>%
+  filter(Conference == 'Big 12') %>%
+  arrange(desc(Net.Rating)) %>%
+  slice(1:25)
+
+ggplot(top_25_Big12, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "The 25 Best Big 12 Teams of the CFP Era",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()
+```
+And then I honored the PAC-12 by offering them one last graphic.
+```{r}
+top_25_PAC12 <- final_set %>%
+  filter(Conference == 'Pac-12') %>%
+  arrange(desc(Net.Rating)) %>%
+  slice(1:25)
+
+ggplot(top_25_PAC12, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "The 25 Best PAC 12 Teams of the CFP Era",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()
+```
+
+And because I hate ignoring the Group of 5 Conferences, I decided to give them a shoutout too.
+```{r}
+top_25_G5 <- final_set %>%
+  filter(Conference != 'SEC' & Conference != 'ACC' &
+           Conference != 'Pac-12' & Conference != 'Big Ten' &
+           Conference != 'Big 12' & Name != "Notre Dame") %>%
+  arrange(desc(Net.Rating)) %>%
+  slice(1:25)
+
+ggplot(top_25_G5, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "Every Team in 2023",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()
+```
+
+
+And more just out of intellectually curiosity, I wanted to see how long it would take to graph every team from 2023. The answer was 30 seconds.
+```{r}
+season_2023 <- final_set %>%
+  filter(Year == 2023)
+
+ggplot(season_2023, aes(x = O.Rating, y = D.Rating)) +
+  geom_median_lines(aes(v_var = O.Rating, h_var = D.Rating)) +
+  geom_cfb_logos(aes(team = Name), width = 0.075) +
+  scale_y_reverse() +
+  labs(title = "Every Team in 2023",  x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()
+```
+
+
+
+Can you derive a ton of meaning out of it? No, I'll admit as much. But it's also something I have wanted to have the ability to do for a long time and am thrilled to have a chance to do so.
+
+```{r}
+(final_25 <- aggregate( 
+  cbind(Net.Rating, O.Rating, D.Rating) 
+  ~ Name + Conference, 
+  data = final_set, 
+  FUN = mean))
+  
+
+(final_25 <- final_25 %>%
+                filter(Conference == 'SEC' | Conference == 'ACC' |
+                        Conference == 'Pac-12' | Conference == 'Big Ten' |
+                        Conference == 'Big 12' | Name == 'Notre Dame') %>%
+                arrange(desc(Net.Rating)) %>%
+                slice(1:25))
+
+top_25_Years <- merge(final_25, 
+                      final_set,
+                      by.x = 'Name',
+                      by.y = 'Name')
+
+```
+
+```{r}
+library(gganimate)
+library(ggplot2)
+
+top_25_plot <- ggplot(top_25_Years, aes(x = O.Rating.y, y = D.Rating.y)) +
+ geom_cfb_logos(aes(team = Name), width = 0.075) + 
+ scale_y_reverse() +  
+  labs(title = 'Year {frame_time}', x = "Offensive Rating", y = "Defensive Rating") +
+  theme_stata()+
+  theme(
+   axis.title.x = element_text(size = 30),
+    axis.title.y = element_text(size = 30),
+    axis.text.x = element_text(size = 25),
+    axis.text.y = element_text(size = 25),
+    title = element_text(size = 30)
+  ) +
+  transition_time(Year) +  
+  ease_aes('linear')
+
+animate(top_25_plot, fps = 60, width = 1600, height = 1200, duration = 20, renderer = gifski_renderer(file = "top_25_animation2.gif", loop = TRUE))
+
+test_fun <- lm(Wins ~ Net.Rating, data = final_set)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
