@@ -1,0 +1,138 @@
+---
+title: "Holy Cross College Housing Model"
+author: "Thomas Zwiller"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+First, lets load in our required libraries. 
+
+```{r}
+#to build our model
+library("randomForest")
+#to make the confusion matrix
+library("caret")
+#how we stratify our data
+library("splitstackshape")
+#how we SMOTE the data
+library("DMwR")
+#ggplot to make our chart
+library("ggplot2")
+#ggthemes to make our charts look nicer
+library("ggthemes")
+```
+
+Next, we need to load in and prep our data. 
+
+```{r}
+#Loading in the housing data
+Housing_Data <- read.csv("/Users/TomTheIntern/Desktop/Mendoza/Mod 2/Data Storytelling/Final Version/Aggregated Housing Data 2.csv", 
+                         header = TRUE, 
+                         stringsAsFactors = TRUE)
+
+#dropping Uedge because we don't need to worry about UEdge
+Housing_Data <- subset(Housing_Data, Hall != 'UEDGE')
+Housing_Data$Hall <- droplevels(Housing_Data$Hall)
+
+#dropping room numbers because we don't need them for now
+Housing_Data <- Housing_Data[ , -2]
+```
+
+We now have the data set that we need in the form we need it. However, it only has 766 total observations, so lets expand our sample size.
+
+```{r}
+#smoting data to help the model identify pulte/pulte 2 and south better
+smote_data <- SMOTE(Hall ~ . , Housing_Data, perc.over = 10000)
+
+
+#dividing our data into subgroups before dividing
+split_dat <- stratified(smote_data, 
+                        group = c("Hall", "Sex", "Single.Occ", "Transfer.Student",
+                                  "Roommate.Request", "Rank.Halls", "Anselm.Rank", "Basil.Rank",                                    "Pulte.Rank", "Pulte.2.Rank" ,"South.Rank", "James.Rank",                                       "North.Rank", "Assist.in.Assignment", "Roommate.Relationship",                                   "Item.Usage", "Clean.Room", "Day.Start.Time", "Day.End.Time",                                    "Sleeping.Habit", "Social.Level"), 
+                        size = 0.2, bothSets = TRUE )
+```
+
+Now that we have an expanded sample size (roughly 9,000) lets actually build our two data sets: a training set so our model can learn what we need it to, and a testing set so we can understand how well our model performs.
+
+
+```{r}
+#setting the random seed so we can recreate it
+set.seed(111111)
+
+#training set
+sampled_data <- as.data.frame(na.omit(split_dat[[1]]))
+
+#testing set
+remaining_data <- na.omit(split_dat[[2]])
+```
+
+Now to build our model. We are going to use a Random Forest model, or essentially, making a set number of decision trees and then using the average of their predictions to make a prediction.
+
+```{r}
+#setting the random seed so we can recreate it
+set.seed(111111)
+
+tree_model1 <- randomForest(Hall ~ . -X, 
+                            data = sampled_data, 
+                            mtry = ncol(Housing_Data) - 4 ,
+                            ntree = 150,
+                            
+                      
+)
+
+tree_model1$importance
+```
+
+With our model made, we can now make predictions and then test them.
+
+```{r}
+#predictions
+preds <- predict(tree_model1, remaining_data)
+
+#confusion matrix
+tree1_confusion <- confusionMatrix(preds, remaining_data$Hall)
+
+confusionMatrix(preds, remaining_data$Hall)
+
+tree_matrix <- as.data.frame(tree1_confusion$table)
+
+ggplot(tree_matrix, aes(x = Reference, y = Prediction, fill = Freq)) +
+  #setting our tile coloring
+  geom_tile(color = "white") + 
+  #setting the color and size of the text
+  geom_text(aes(label = Freq), color = "black", size = 5) +
+  #setting the color of our gradient
+  scale_fill_gradient(low = "white", high = "maroon") +
+  #adding in labels
+  labs(title = "How Well The Model Predicts Housing", x = "Actual Assignments", y = "Predicted Assignments") +
+  #plus our theme
+  theme_minimal()
+
+tree1_confusion$overall
+```
+
+Based on the confusion matrix the model has an overall accuracy of just over 80%, meaning the model is able to recreate prior housing decisions roughly 80% of the time. 
+
+The model does tend to be a little bit confused about how to deal with Pulte 2 because it is a smaller hall with less data, and has similar housing placements to North Hall. 
+
+Anselm, Basil, and James were the most accurate halls.
+
+Now with our base model set up, we can do two things. 
+
+The first would be to create a UI (user-interface) for the Hall Staff to use which should allow them to upload survey results inside a CSV file (excel). The UI should then read in the data and return the results back to Hall Staff quickly. 
+
+The other option is to make a Basic Excel R Toolkit (BERT) file, which would enable Hall Staff to use the model inside of excel. We would need to talk to the school about which the staff would prefer and which the school would be willing to pay to develop. 
+
+The UI would likely take the least time to make and should be easy for the staff to use, but the BERT may take more time to develop, though it could be easier for the staff to use. 
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
