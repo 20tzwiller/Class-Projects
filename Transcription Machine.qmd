@@ -31,7 +31,7 @@ Reading in Model from Desktop
 ```{python}
 def whisper_model(): 
     # Set a custom directory for saving the model
-    model_dir = "/Users/TomTheIntern/Desktop/Illustrated/Transcription Machine/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478"
+    model_dir = 'LOAD IN THE MODEL FROM ONLINE OR FROM DESKTOP HERE'
     # Load model from custom directory (no internet download required)
     model = WhisperModel(model_dir, device="cpu", compute_type="float32")
 
