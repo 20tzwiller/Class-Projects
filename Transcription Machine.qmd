@@ -86,7 +86,7 @@ def transcriber(file_name : str, model: str, user_named: str):
         transcription_text.append(segment.text)
         print(segment.text)
 
-    name = '/Users/TomTheIntern/Desktop/' + user_named + '.txt'
+    name = 'INCLUDE THE LOCATION WHERE YOU WANT THE FILE TO GO HERE' + user_named + '.txt'
 
     # Save transcription to a file
     with open(name, 'w') as file:
