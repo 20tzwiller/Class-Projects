@@ -1,0 +1,140 @@
+---
+title: "Transcription Machine"
+author: "Thomas Zwiller"
+format:
+  html:
+    toc: true
+    toc-location: left
+    self-contained: true
+jupyter: python3
+---
+
+Importing the needed libraries
+```{python}
+import matplotlib.pyplot as plt
+import os
+import numpy as np
+import wave
+import subprocess
+from faster_whisper import WhisperModel
+from pydub import AudioSegment
+import re
+import noisereduce as nr
+import librosa
+import soundfile as sf
+from pyannote.audio.pipelines.speaker_diarization import SpeakerDiarization
+from pyannote.core import Segment
+import torch
+```
+
+Reading in Model from Desktop
+```{python}
+def whisper_model(): 
+    # Set a custom directory for saving the model
+    model_dir = "/Users/TomTheIntern/Desktop/Illustrated/Transcription Machine/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478"
+    # Load model from custom directory (no internet download required)
+    model = WhisperModel(model_dir, device="cpu", compute_type="float32")
+
+    return model
+```
+
+Normalizing Audio Function
+
+Normalizes the Audio, Reduces the Noise
+```{python}
+def audio_cleaner(file_path: str):
+
+    audio = AudioSegment.from_file(file_path)
+    normalized_audio = audio.normalize()
+    normalized_audio.export("normalized_audio.wav", format="wav")
+
+    # Load audio
+    y, sr = librosa.load("normalized_audio.wav", sr=None)
+
+    # Reduce noise
+    reduced_noise = nr.reduce_noise(y=y, sr=sr)
+
+    # Save cleaned audio
+    sf.write("denoised_audio.wav", reduced_noise, sr)
+
+    input_file = "denoised_audio.wav"
+    output_file = "output.wav"
+
+    # Run ffmpeg command
+    subprocess.run([
+        "ffmpeg", "-y", "-i", input_file,
+        "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000",
+        output_file
+    ], check=True)
+
+    return output_file
+```
+
+```{python}
+def transcriber(file_name : str, model: str, user_named: str): 
+
+    segments, info = model.transcribe('output.wav',
+                temperature = 0.0,
+                no_repeat_ngram_size = 7, 
+                vad_filter = True, 
+                word_timestamps = True)
+
+    # Store text output
+    transcription_text = []
+
+    for segment in segments:
+        transcription_text.append(segment.text)
+        print(segment.text)
+
+    name = '/Users/TomTheIntern/Desktop/' + user_named + '.txt'
+
+    # Save transcription to a file
+    with open(name, 'w') as file:
+        for line in transcription_text:
+            line = line.strip()  # Remove extra spaces
+            # Check if line is a question (ends with '?')
+            if re.match(r"^(.*?\?)$", line):  
+                file.write("\n\n" + line + "\n\n")  # Add two blank lines before & after the question
+            else:
+                file.write(line + " ")  # Keep spacing between sentences
+```
+
+Code Body
+```{python}
+model = whisper_model()
+print("Model loaded successfully.\n")
+path = False
+
+while not path:
+    try:
+        audio_path = str(input('Please enter the path to the audio file: \n')).strip()
+
+        audio_path = re.sub(r"^['\"]|['\"]$", "", audio_path) 
+
+        if not os.path.isfile(audio_path):
+            raise FileNotFoundError(f"No such file: '{audio_path} \n'")
+        print(f"Audio file found: {audio_path} \n")
+        path = True
+    except FileNotFoundError as e:
+        print(e)
+        audio_path = ''
+
+clean_audio = str(input('Do you need the audio file cleaned? Y/N'))
+
+user_file_name = str(input('Please name your file.'))
+
+if clean_audio.lower() == 'y' or clean_audio.lower() == 'yes':
+    print('Audio being cleaned.')
+    
+    file_name = audio_cleaner(audio_path)
+
+    transcriber(file_name, model, user_file_name)
+
+    print('Task Done!')
+else:
+    print('Audio not being cleaned, transcript in process.')
+
+    transcriber(file_name, model, user_file_name)
+
+    print('Task Done!')
+```
