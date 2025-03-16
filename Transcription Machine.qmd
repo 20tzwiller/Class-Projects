@@ -31,7 +31,7 @@ Reading in Model from Desktop
 ```{python}
 def whisper_model(): 
     # Set a custom directory for saving the model
-    model_dir = 'LOAD IN THE MODEL FROM ONLINE OR FROM DESKTOP HERE'
+    model_dir = "/Users/TomTheIntern/Desktop/Illustrated/Transcription Machine/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478"
     # Load model from custom directory (no internet download required)
     model = WhisperModel(model_dir, device="cpu", compute_type="float32")
 
@@ -43,27 +43,13 @@ Normalizing Audio Function
 Normalizes the Audio, Reduces the Noise
 ```{python}
 def audio_cleaner(file_path: str):
+    output_file = "cleaned_audio.wav"
 
-    audio = AudioSegment.from_file(file_path)
-    normalized_audio = audio.normalize()
-    normalized_audio.export("normalized_audio.wav", format="wav")
-
-    # Load audio
-    y, sr = librosa.load("normalized_audio.wav", sr=None)
-
-    # Reduce noise
-    reduced_noise = nr.reduce_noise(y=y, sr=sr)
-
-    # Save cleaned audio
-    sf.write("denoised_audio.wav", reduced_noise, sr)
-
-    input_file = "denoised_audio.wav"
-    output_file = "output.wav"
-
-    # Run ffmpeg command
+    # Reduce steps by doing everything in one ffmpeg command
     subprocess.run([
-        "ffmpeg", "-y", "-i", input_file,
-        "-acodec", "pcm_s16le", "-ac", "1", "-ar", "16000",
+        "ffmpeg", "-y", "-i", file_path,
+        "-ac", "1", "-ar", "16000",  # Convert to mono & 16kHz (best for Whisper)
+        "-filter:a", "afftdn",  # Basic noise reduction (faster than `noisereduce`)
         output_file
     ], check=True)
 
@@ -71,22 +57,43 @@ def audio_cleaner(file_path: str):
 ```
 
 ```{python}
-def transcriber(file_name : str, model: str, user_named: str): 
+from tqdm import tqdm  # Import tqdm for progress bar
+from pydub import AudioSegment
+from datetime import timedelta
+import time
 
-    segments, info = model.transcribe('output.wav',
-                temperature = 0.0,
-                no_repeat_ngram_size = 7, 
-                vad_filter = True, 
-                word_timestamps = True)
+def transcriber(file_name: str, model, user_named: str): 
+    print("\n🔄 Transcription in progress...")
 
-    # Store text output
+    # Get total duration of audio (for progress tracking)
+    audio_duration = len(AudioSegment.from_file(file_name)) / 1000  # Convert ms to seconds
+
+    segments, info = model.transcribe(file_name,
+                temperature=0.0,
+                no_repeat_ngram_size=7, 
+                vad_filter=True, 
+                word_timestamps=True)  
+
     transcription_text = []
 
-    for segment in segments:
-        transcription_text.append(segment.text)
-        print(segment.text)
+    # Progress bar for processing each segment
+    with tqdm(total=audio_duration, unit="s", desc="Transcribing", dynamic_ncols=True, leave=True) as pbar:
+        start_time = time.time()
+    
+        for segment in segments:
+            text = segment.text
+            transcription_text.append(text)
 
-    name = 'INCLUDE THE LOCATION WHERE YOU WANT THE FILE TO GO HERE' + user_named + '.txt'
+            pbar.update(segment.end - segment.start)
+
+        # Calculate and show estimated time remaining
+            elapsed_time = time.time() - start_time
+            speed = elapsed_time / pbar.n if pbar.n > 0 else 0
+            remaining_time = (audio_duration - pbar.n) * speed if speed > 0 else 0
+            pbar.set_postfix(ETA=str(timedelta(seconds=int(remaining_time))))
+
+    # Save transcription to file
+    name = '/Users/TomTheIntern/Desktop/ZeLO/Transcription Machine/Output/' + user_named + '.txt'
 
     # Save transcription to a file
     with open(name, 'w') as file:
