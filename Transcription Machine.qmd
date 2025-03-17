@@ -32,7 +32,7 @@ Reading in Model from Desktop
 def whisper_model(): 
     # Set a custom directory for saving the model
     model_dir = "/Users/TomTheIntern/Desktop/Illustrated/Transcription Machine/models--Systran--faster-whisper-large-v3/snapshots/edaa852ec7e145841d8ffdb056a99866b5f0a478"
-    # Load model from custom directory (no internet download required)
+    # Load model computer location
     model = WhisperModel(model_dir, device="cpu", compute_type="float32")
 
     return model
@@ -63,7 +63,7 @@ from datetime import timedelta
 import time
 
 def transcriber(file_name: str, model, user_named: str): 
-    print("\n🔄 Transcription in progress...")
+    print("\nTranscription in progress...")
 
     # Get total duration of audio (for progress tracking)
     audio_duration = len(AudioSegment.from_file(file_name)) / 1000  # Convert ms to seconds
@@ -88,7 +88,7 @@ def transcriber(file_name: str, model, user_named: str):
 
         # Calculate and show estimated time remaining
             elapsed_time = time.time() - start_time
-            speed = elapsed_time / pbar.n if pbar.n > 0 else 0
+            speed = round(elapsed_time, 2) / round(pbar.n if pbar.n > 0 else 0, 2)
             remaining_time = (audio_duration - pbar.n) * speed if speed > 0 else 0
             pbar.set_postfix(ETA=str(timedelta(seconds=int(remaining_time))))
 
