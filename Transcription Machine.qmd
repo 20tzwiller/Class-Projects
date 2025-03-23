@@ -82,6 +82,12 @@ def transcriber(file_name: str, model, user_named: str):
             remaining_time = (audio_duration - pbar.n) * speed if speed > 0 else 0
             pbar.set_postfix(ETA=str(timedelta(seconds=int(remaining_time))))
 
+    replacements = {}
+    for i, text in enumerate(transcription_text):
+        for key, value in replacements.items():
+            text = text.replace(key, value)
+        transcription_text[i] = text
+
     # Save transcription to file
     name = '/Users/TomTheIntern/Desktop/ZeLO/Transcription Machine/Output/' + user_named + '.txt'
 
