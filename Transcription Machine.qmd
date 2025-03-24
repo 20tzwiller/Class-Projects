@@ -120,9 +120,11 @@ def main():
                 return
 
             if not os.path.isfile(audio_path):
-                raise FileNotFoundError(f"No such file: '{audio_path} \n'")
-                print(f"Audio file found: {audio_path} \n")
+                raise FileNotFoundError(f"No such file: '{audio_path}'\n")
+            else:
+                print(f"Audio file found: {audio_path}\n")
                 path = True
+
         
         except FileNotFoundError as e:
             print(e)
