@@ -1,0 +1,155 @@
+---
+title: "Networks Project"
+author: "Thomas Zwiller"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+#reading in the igraph and ggraph plots
+library(igraph)
+library(ggraph)
+library(gplots)
+library(dplyr)
+```
+
+```{r}
+#reading in the edges and nodes data
+edges <- read.table("/Users/TomTheIntern/Desktop/Airport Edge Data 2010.txt")
+nodes <- read.table("/Users/TomTheIntern/Desktop/Airport 2010 Nodes.txt")
+
+edges %>% 
+  rename(
+    Ego = V1,
+    Alter = V2,
+    Strength = V3
+    )
+
+#making our igraph plot as an undirected network
+net <- graph_from_data_frame(edges, directed = F, vertices = nodes)
+
+#removing any isolets 
+net <- delete_vertices(net, degree(net) == 0)
+```
+<br>
+#3. Visualizations
+```{r}
+#basic plot
+airport_plot <- ggraph(net) +
+                geom_edge_link(color = "black", alpha = 0.3) +
+                geom_node_point(color = "black", fill = "#efd9d3", shape = 21) +
+                theme_graph()
+
+#writing out the plot so that we can use it in powerpoint
+png("airport_network.png", width = 5000, height = 4000, res = 300)
+plot(airport_plot)
+dev.off()
+```
+
+#4. Centrality
+```{r}
+deg <- igraph::degree(net) #total degree
+deg 
+
+airport_degs <- as.data.frame(deg)
+
+airport_plot_scaled <- ggraph(net) + 
+                        geom_edge_link0(color = "black", alpha = .5) +
+                        geom_node_point(fill = "#EFD9D3", color = "black", shape = 21, 
+                        size = V(net)$deg <- igraph::degree(net, mode = "all") / 50) + #node size is now based on degree rather than a number of your choosing
+                        ggnetwork::theme_blank()
+
+png("airport_network_scaled.png", width = 5000, height = 4000, res = 300)
+plot(airport_plot_scaled)
+
+
+# out degree####
+deg_out <- igraph::degree(net, mode = "out") #out degree
+deg_out
+
+airpot_out_data <- as.data.frame(deg_out)
+
+airport_out <- ggraph(net) + 
+                geom_edge_link(color = "black", alpha = .5,
+                                arrow = grid::arrow(angle = 20,
+                                length = unit(0.10, "in"),
+                                type = "closed"), 
+                                start_cap = circle(2, 'mm'),
+                                end_cap = circle(2, 'mm')) +
+                                geom_node_point(fill = "#EFD9D3", 
+                                                color = "black", shape = 21, 
+                                size = igraph::degree(net, mode = "out")) +
+                                ggnetwork::theme_blank()
+
+png("airport_out.png", width = 5000, height = 4000, res = 300)
+plot(airport_out)
+
+deg_in <- igraph::degree(net, mode = "in") #in degree
+deg_in
+
+airport_in <-  ggraph(net) + 
+                geom_edge_link(color = "black", alpha = .5,
+                                arrow = grid::arrow(angle = 20,
+                                length = unit(0.10, "in"),
+                                type = "closed"), 
+                                start_cap = circle(2, 'mm'),
+                                end_cap = circle(2, 'mm')) +
+                                geom_node_point(fill = "#EFD9D3", 
+                                                color = "black", shape = 21, 
+                                size = igraph::degree(net, mode = "in")) +
+                                ggnetwork::theme_blank()
+png("airport_in.png", width = 5000, height = 4000, res = 300)
+plot(airport_in)
+
+airport_in_data <- as.data.frame(deg_in)
+
+
+evc_undir <- eigen_centrality(net, directed = F)$vector #must pull the vector
+#OR
+evc_data <- as.data.frame(evc_undir)
+
+ggraph(net) + 
+  geom_edge_link(color = "black", alpha = .5) +
+  geom_node_point(fill = "#EFD9D3", color = "black", shape = 21, 
+                  size = igraph::eigen_centrality(net)$vector*10) +
+  ggnetwork::theme_blank()
+cent_evc <- centr_eigen(net)$centralization
+round(cent_evc, digits = 2)
+```
+
+#5. Structuring
+```{r}
+
+```
+
+#6. Clustering/Communities
+```{r}
+
+```
+
+#7. Multi-level Modeling
+```{r}
+
+```
+
+#8. ERGMs
+```{r}
+
+```
+
+#9. Contagions
+```{r}
+
+```
+
+#10. Interventions
+```{r}
+
+```
+
+
+
+
+<br>
+<br>
+<br>
