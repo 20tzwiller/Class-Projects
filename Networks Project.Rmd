@@ -18,18 +18,26 @@ library(dplyr)
 edges <- read.table("/Users/TomTheIntern/Desktop/Airport Edge Data 2010.txt")
 nodes <- read.table("/Users/TomTheIntern/Desktop/Airport 2010 Nodes.txt")
 
-edges %>% 
-  rename(
-    Ego = V1,
-    Alter = V2,
-    Strength = V3
-    )
+#renaming the edges
+edges <- edges %>% 
+                  rename(Ego = V1,
+                         Alter = V2,
+                         Strength = V3)
 
-#making our igraph plot as an undirected network
-net <- graph_from_data_frame(edges, directed = F, vertices = nodes)
+#renaming the nodes
+nodes <- nodes %>% rename(ID = V1,
+                          Airport = V2)
 
-#removing any isolets 
-net <- delete_vertices(net, degree(net) == 0)
+#okay so this was a weird part of the project. 
+#Basically, a bunch of the nodes were isolates and made the graph look really clunky
+#so, I made a list of all unqiue edges and alters in the edge list
+edges_list <- append(unique(edges$Ego), unique(edges$Alter))
+
+#and then made a subset of the nodes list where I kept the ID and the airport
+nodes <- subset(nodes, ID %in% edges_list, select = c(ID, Airport))
+
+#and could finally make a net diagram with minimal isolates
+net <- graph_from_data_frame(edges, directed = T, vertices = nodes)
 ```
 <br>
 #3. Visualizations
