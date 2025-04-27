@@ -36,6 +36,14 @@ edges_list <- append(unique(edges$Ego), unique(edges$Alter))
 #and then made a subset of the nodes list where I kept the ID and the airport
 nodes <- subset(nodes, ID %in% edges_list, select = c(ID, Airport))
 
+#we also then noticed that the data had two nodes that only connected with each other and nothing else which broke some of our models
+#Airport LCI and NY5
+
+nodes <- nodes[nodes$Airport != 'LCI', ]
+nodes <- nodes[nodes$Airport != 'NY5', ]
+
+edges <- edges[edges$Ego != '889' & edges$Alter != '889' ,]
+
 #and could finally make a net diagram with minimal isolates
 net <- graph_from_data_frame(edges, directed = T, vertices = nodes)
 ```
